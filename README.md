@@ -17,7 +17,7 @@ The menu bar shows the phase and time left. The menu has Start/Pause, Reset, Ski
 ## Run from source
 
 ```sh
-git clone <this repo>
+git clone https://github.com/Nabeel-Revo/pomodoro-timer.git
 cd pomodoro-timer
 swift run
 ```
@@ -40,6 +40,13 @@ Edit `Preset.builtIn` in `Sources/Pomodoro/PomodoroTimer.swift`, then rebuild. O
 ```sh
 swift test
 ```
+
+## Project layout
+
+- `Sources/Pomodoro/PomodoroTimer.swift` — timer state machine, presets, persistence (no UI)
+- `Sources/Pomodoro/PomodoroApp.swift` — menu-bar UI, custom-timer window, notifications
+- `Tests/PomodoroTests/` — Swift Testing tests for the timer logic
+- `Info.plist`, `Makefile` — turn the build into `Pomodoro.app`
 
 If `swift test` says it can't find `Testing`, your active toolchain is the Command Line Tools, which don't ship test frameworks. Point it at Xcode for that command:
 
