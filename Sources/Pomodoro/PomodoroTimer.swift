@@ -2,22 +2,56 @@ import Foundation
 
 enum Phase { case work, shortBreak, longBreak }
 
+struct Preset: Codable, Equatable, Hashable {
+    var name: String
+    var work: Int       // minutes
+    var shortBreak: Int
+    var longBreak: Int
+
+    static let builtIn = [
+        Preset(name: "Focus", work: 25, shortBreak: 5, longBreak: 15),
+        Preset(name: "Deep work", work: 50, shortBreak: 10, longBreak: 20),
+    ]
+
+    func minutes(for phase: Phase) -> Int {
+        switch phase {
+        case .work: work
+        case .shortBreak: shortBreak
+        case .longBreak: longBreak
+        }
+    }
+}
+
+struct Settings: Codable {
+    var preset = Preset.builtIn[0]
+    var customPresets: [Preset] = []
+    var autoStartBreaks = false
+    var autoStartWork = false
+    var sessionsByDay: [Date: Int] = [:]  // key: start of day
+}
+
 final class PomodoroTimer: ObservableObject {
-    // Edit these to change the schedule (seconds).
-    static let durations: [Phase: Int] = [.work: 25 * 60, .shortBreak: 5 * 60, .longBreak: 15 * 60]
     static let sessionsBeforeLongBreak = 4
+    static let storageKey = "settings"
 
     @Published private(set) var phase: Phase = .work
-    @Published private(set) var remaining = durations[.work]!
+    @Published private(set) var remaining: Int  // seconds; authoritative only while paused
     @Published private(set) var running = false
-    @Published private(set) var completedSessions = 0
+    @Published var settings: Settings {
+        didSet { defaults.set(try? JSONEncoder().encode(settings), forKey: Self.storageKey) }
+    }
 
+    private var endDate: Date?
     private let onPhaseEnd: (Phase) -> Void
+    private let defaults: UserDefaults
     private var ticker: Timer?
 
-    init(onPhaseEnd: @escaping (Phase) -> Void) {
+    init(onPhaseEnd: @escaping (Phase) -> Void, defaults: UserDefaults = .standard) {
         self.onPhaseEnd = onPhaseEnd
-        // shortcut: counts wall-clock seconds via a 1s Timer, drifts a few seconds over 25 min; switch to an end Date if that matters
+        self.defaults = defaults
+        let saved = defaults.data(forKey: Self.storageKey).flatMap { try? JSONDecoder().decode(Settings.self, from: $0) }
+        settings = saved ?? Settings()
+        remaining = (saved ?? Settings()).preset.work * 60
         ticker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.tick() }
     }
 
@@ -25,33 +59,70 @@ final class PomodoroTimer: ObservableObject {
         String(format: "%@ %d:%02d", phase == .work ? "🍅" : "☕️", remaining / 60, remaining % 60)
     }
 
-    func toggle() { running.toggle() }
+    var allPresets: [Preset] { Preset.builtIn + settings.customPresets }
 
-    func reset() {
-        running = false
-        remaining = Self.durations[phase]!
+    func sessions(today now: Date = Date()) -> Int {
+        settings.sessionsByDay[Calendar.current.startOfDay(for: now)] ?? 0
     }
 
-    func skip() { advance() }
+    func sessions(thisWeek now: Date = Date()) -> Int {
+        settings.sessionsByDay
+            .filter { Calendar.current.isDate($0.key, equalTo: now, toGranularity: .weekOfYear) }
+            .reduce(0) { $0 + $1.value }
+    }
 
-    func tick() {
-        guard running else { return }
-        remaining -= 1
-        if remaining <= 0 {
+    func toggle(now: Date = Date()) { running ? pause(now: now) : start(now: now) }
+
+    func start(now: Date = Date()) {
+        endDate = now.addingTimeInterval(TimeInterval(remaining))
+        running = true
+    }
+
+    func pause(now: Date = Date()) {
+        tick(now: now)
+        endDate = nil
+        running = false
+    }
+
+    func reset() {
+        endDate = nil
+        running = false
+        remaining = settings.preset.minutes(for: phase) * 60
+    }
+
+    func skip(now: Date = Date()) { advance(now: now) }
+
+    func select(_ preset: Preset, now: Date = Date()) {
+        settings.preset = preset
+        phase = .work
+        reset()
+    }
+
+    func addCustom(_ preset: Preset) {
+        settings.customPresets.removeAll { $0.name == preset.name }
+        settings.customPresets.append(preset)
+        select(preset)
+    }
+
+    /// Recomputes `remaining` from the wall clock, so sleep/wake and timer drift don't matter.
+    func tick(now: Date = Date()) {
+        guard running, let endDate else { return }
+        remaining = max(0, Int(endDate.timeIntervalSince(now).rounded(.up)))
+        if remaining == 0 {
             let ended = phase
-            advance()
+            advance(now: now)
             onPhaseEnd(ended)
         }
     }
 
-    private func advance() {
+    private func advance(now: Date) {
         if phase == .work {
-            completedSessions += 1
-            phase = completedSessions % Self.sessionsBeforeLongBreak == 0 ? .longBreak : .shortBreak
+            settings.sessionsByDay[Calendar.current.startOfDay(for: now), default: 0] += 1
+            phase = sessions(today: now) % Self.sessionsBeforeLongBreak == 0 ? .longBreak : .shortBreak
         } else {
             phase = .work
         }
-        remaining = Self.durations[phase]!
-        running = false
+        reset()
+        if phase == .work ? settings.autoStartWork : settings.autoStartBreaks { start(now: now) }
     }
 }

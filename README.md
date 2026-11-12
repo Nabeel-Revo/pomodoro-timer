@@ -2,7 +2,12 @@
 
 A tiny macOS menu-bar Pomodoro timer. No Xcode project, no dependencies, nothing hosted.
 
-25 min work → 5 min break, with a 15 min break after every 4th session. The menu bar shows the phase and time left. Start/Pause, Reset, Skip and Quit live in the menu. A sound and a notification fire when a phase ends; the next phase waits for you to press Start.
+The menu bar shows the phase and time left. The menu has Start/Pause, Reset, Skip, a Preset submenu, auto-start toggles, today's and this week's session counts, and Quit. A sound and a notification fire when a phase ends.
+
+- **Presets**: Focus (25 / 5 / 15 min), Deep work (50 / 10 / 20 min), or Custom… to save your own work / break / long-break lengths. A long break comes after every 4th work session.
+- **Auto-start breaks / work**: off by default, so the next phase waits for Start.
+- **Persistence**: preset, custom timers, toggles and session history are saved in UserDefaults.
+- **Wall-clock timing**: the countdown is computed from an end time, so it stays correct after sleep or under load.
 
 ## Requirements
 
@@ -26,9 +31,9 @@ make install   # copies it to /Applications
 
 To launch at login: System Settings → General → Login Items → add Pomodoro.
 
-## Change the durations
+## Change the built-in presets
 
-Edit `durations` and `sessionsBeforeLongBreak` at the top of `Sources/Pomodoro/PomodoroTimer.swift`, then rebuild.
+Edit `Preset.builtIn` in `Sources/Pomodoro/PomodoroTimer.swift`, then rebuild. Or just use Custom… in the app.
 
 ## Test
 
