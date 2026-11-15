@@ -34,6 +34,15 @@ struct PomodoroApp: App {
             Toggle("Auto-start work", isOn: $timer.settings.autoStartWork)
             Divider()
             Text("Today: \(timer.sessions(today: Date()))  ·  This week: \(timer.sessions(thisWeek: Date()))")
+            Text("🔥 Streak: \(timer.streak()) days  ·  Best: \(timer.bestStreak())")
+            Menu("Daily goal: \(timer.settings.dailyGoal)") {
+                ForEach(1...4, id: \.self) { n in
+                    Toggle(
+                        "\(n) session\(n == 1 ? "" : "s") a day",
+                        isOn: Binding(get: { timer.settings.dailyGoal == n }, set: { _ in timer.settings.dailyGoal = n })
+                    )
+                }
+            }
             Divider()
             Button("Quit") { NSApplication.shared.terminate(nil) }.keyboardShortcut("q")
         }

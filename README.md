@@ -7,6 +7,7 @@ The menu bar shows the phase and time left. The menu has Start/Pause, Reset, Ski
 - **Presets**: Focus (25 / 5 / 15 min), Deep work (50 / 10 / 20 min), or Custom… to save your own work / break / long-break lengths. A long break comes after every 4th work session.
 - **Auto-start breaks / work**: off by default, so the next phase waits for Start.
 - **Persistence**: preset, custom timers, toggles and session history are saved in UserDefaults.
+- **Streaks**: consecutive days where you hit your daily goal (1 to 4 sessions, set in the menu). Today doesn't break the streak until midnight; the menu also shows your best streak.
 - **Wall-clock timing**: the countdown is computed from an end time, so it stays correct after sleep or under load.
 
 ## Requirements

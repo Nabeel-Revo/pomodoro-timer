@@ -76,3 +76,31 @@ private func makeTimer(onPhaseEnd: @escaping (Phase) -> Void = { _ in }) -> (Pom
     #expect(timer.remaining == 25 * 60)
     #expect(!timer.running)
 }
+
+private func day(_ offset: Int, from base: Date = t0) -> Date {
+    Calendar.current.startOfDay(for: Calendar.current.date(byAdding: .day, value: offset, to: base)!)
+}
+
+@Test func streakCountsConsecutiveGoalDaysAndForgivesToday() {
+    let (timer, _) = makeTimer()
+    timer.settings.sessionsByDay = [day(-1): 1, day(-2): 2, day(-3): 1, day(-5): 3]
+    #expect(timer.streak(now: t0) == 3, "today not done yet, yesterday's run still counts")
+    timer.settings.sessionsByDay[day(0)] = 1
+    #expect(timer.streak(now: t0) == 4)
+    #expect(timer.bestStreak() == 4)
+    timer.settings.dailyGoal = 2
+    #expect(timer.streak(now: t0) == 0)
+    #expect(timer.bestStreak() == 1)
+    #expect(timer.streak(now: day(2)) == 0, "a missed day breaks it")
+}
+
+@Test func settingsSavedByOlderVersionStillLoad() throws {
+    let (timer, defaults) = makeTimer()
+    timer.settings.sessionsByDay = [day(0): 2]
+    var json = try #require(try JSONSerialization.jsonObject(with: defaults.data(forKey: PomodoroTimer.storageKey)!) as? [String: Any])
+    json.removeValue(forKey: "dailyGoal")
+    defaults.set(try JSONSerialization.data(withJSONObject: json), forKey: PomodoroTimer.storageKey)
+    let reloaded = PomodoroTimer(onPhaseEnd: { _ in }, defaults: defaults)
+    #expect(reloaded.settings.dailyGoal == 1)
+    #expect(reloaded.sessions(today: t0) == 2, "history survives the upgrade")
+}

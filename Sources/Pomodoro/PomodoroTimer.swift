@@ -28,6 +28,20 @@ struct Settings: Codable {
     var autoStartBreaks = false
     var autoStartWork = false
     var sessionsByDay: [Date: Int] = [:]  // key: start of day
+    var dailyGoal = 1  // sessions needed for a day to count toward the streak
+
+    init() {}
+
+    // Hand-written so settings saved by older versions (missing newer keys) still load.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        preset = try c.decode(Preset.self, forKey: .preset)
+        customPresets = try c.decode([Preset].self, forKey: .customPresets)
+        autoStartBreaks = try c.decode(Bool.self, forKey: .autoStartBreaks)
+        autoStartWork = try c.decode(Bool.self, forKey: .autoStartWork)
+        sessionsByDay = try c.decode([Date: Int].self, forKey: .sessionsByDay)
+        dailyGoal = try c.decodeIfPresent(Int.self, forKey: .dailyGoal) ?? 1
+    }
 }
 
 final class PomodoroTimer: ObservableObject {
@@ -69,6 +83,36 @@ final class PomodoroTimer: ObservableObject {
         settings.sessionsByDay
             .filter { Calendar.current.isDate($0.key, equalTo: now, toGranularity: .weekOfYear) }
             .reduce(0) { $0 + $1.value }
+    }
+
+    /// Consecutive goal-met days ending today, or yesterday if today isn't done yet.
+    func streak(now: Date = Date()) -> Int {
+        let cal = Calendar.current
+        var day = cal.startOfDay(for: now)
+        if !goalMet(day) { day = cal.date(byAdding: .day, value: -1, to: day)! }
+        var count = 0
+        while goalMet(day) {
+            count += 1
+            day = cal.date(byAdding: .day, value: -1, to: day)!
+        }
+        return count
+    }
+
+    func bestStreak() -> Int {
+        let cal = Calendar.current
+        let days = settings.sessionsByDay.keys.filter(goalMet)
+        return days.map { start in
+            var day = start, run = 0
+            while goalMet(day) {
+                run += 1
+                day = cal.date(byAdding: .day, value: 1, to: day)!
+            }
+            return run
+        }.max() ?? 0
+    }
+
+    private func goalMet(_ day: Date) -> Bool {
+        (settings.sessionsByDay[day] ?? 0) >= settings.dailyGoal
     }
 
     func toggle(now: Date = Date()) { running ? pause(now: now) : start(now: now) }
