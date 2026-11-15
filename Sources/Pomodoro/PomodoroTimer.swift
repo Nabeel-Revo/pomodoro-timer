@@ -155,7 +155,8 @@ final class PomodoroTimer: ObservableObject {
         remaining = settings.preset.minutes(for: phase) * 60
     }
 
-    func skip(now: Date = Date()) { advance(now: now) }
+    /// Moves to the next phase without credit: only a work session that runs to zero counts.
+    func skip(now: Date = Date()) { advance(now: now, completed: false) }
 
     /// After an idle auto-pause: optionally count the away time as work, then continue.
     func resume(afterIdleSince since: Date, countIt: Bool, now: Date = Date()) {
@@ -197,15 +198,16 @@ final class PomodoroTimer: ObservableObject {
         remaining = max(0, Int(endDate.timeIntervalSince(now).rounded(.up)))
         if remaining == 0 {
             let ended = phase
-            advance(now: now)
+            advance(now: now, completed: true)
             onPhaseEnd(ended)
         }
     }
 
-    private func advance(now: Date) {
+    private func advance(now: Date, completed: Bool) {
         if phase == .work {
-            settings.sessionsByDay[Calendar.current.startOfDay(for: now), default: 0] += 1
-            phase = sessions(today: now) % Self.sessionsBeforeLongBreak == 0 ? .longBreak : .shortBreak
+            if completed { settings.sessionsByDay[Calendar.current.startOfDay(for: now), default: 0] += 1 }
+            let done = sessions(today: now)
+            phase = done > 0 && done % Self.sessionsBeforeLongBreak == 0 ? .longBreak : .shortBreak
         } else {
             phase = .work
         }

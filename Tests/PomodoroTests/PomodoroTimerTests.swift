@@ -158,3 +158,15 @@ private func day(_ offset: Int, from base: Date = t0) -> Date {
     #expect(timer.remaining == 4 * 60)
     _ = idle
 }
+
+@Test func skippingWorkDoesNotCountAsASession() {
+    let (timer, _) = makeTimer()
+    timer.start(now: t0)
+    timer.tick(now: t0 + 600)
+    timer.skip(now: t0 + 600)
+    #expect(timer.phase == .shortBreak)
+    #expect(timer.sessions(today: t0) == 0)
+    timer.skip(now: t0 + 600)
+    #expect(timer.phase == .work)
+    #expect(timer.sessions(today: t0) == 0)
+}
