@@ -15,7 +15,11 @@ struct PomodoroApp: App {
         timer.onIdleReturn = { [unowned timer] since in DispatchQueue.main.async { askAboutIdle(since: since, timer: timer) } }
         _timer = StateObject(wrappedValue: timer)
         Notifier.shared.setup(timer: timer)
-        registerHotKeys([(kVK_ANSI_P, { timer.toggle() }), (kVK_ANSI_K, { timer.skip() })])
+        // Hotkeys give no visual feedback, so confirm with a distinct sound per action.
+        registerHotKeys([
+            (kVK_ANSI_P, { timer.toggle(); NSSound(named: timer.running ? "Tink" : "Pop")?.play() }),
+            (kVK_ANSI_K, { timer.skip(); NSSound(named: "Purr")?.play() }),
+        ])
     }
 
     var body: some Scene {

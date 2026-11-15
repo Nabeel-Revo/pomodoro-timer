@@ -8,7 +8,7 @@ The menu bar shows the phase and time left. The menu has Start/Pause, Reset, Ski
 - **Auto-start breaks / work**: off by default, so the next phase waits for Start.
 - **Persistence**: preset, custom timers, toggles and session history are saved in UserDefaults.
 - **Streaks**: consecutive days where you hit your daily goal (1 to 4 sessions, set in the menu). Today doesn't break the streak until midnight; the menu also shows your best streak.
-- **Global hotkeys**: ⌃⌥P starts or pauses, ⌃⌥K skips, from any app.
+- **Global hotkeys**: ⌃⌥P starts or pauses, ⌃⌥K skips, from any app. A short sound confirms each: high "tink" for start, "pop" for pause, "purr" for skip.
 - **Pause awareness**: after 2 minutes paused, the menu bar shows how long, e.g. `🍅 24:50 ⏸7m`.
 - **Idle detection**: 5 minutes without keyboard or mouse input during a work session pauses the timer and rewinds it to when you went idle. When you return, it asks whether to resume, count the away time as work, or stay paused.
 - **Notifications with buttons**: Start and Skip right from the banner. Needs a signed build (see below); otherwise you get a plain notification.
