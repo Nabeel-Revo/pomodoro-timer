@@ -1,21 +1,28 @@
 import AppKit
+import Carbon.HIToolbox
 import SwiftUI
+import UserNotifications
 
 @main
 struct PomodoroApp: App {
-    @StateObject private var timer = PomodoroTimer(onPhaseEnd: notify)
+    @StateObject private var timer: PomodoroTimer
     @Environment(\.openWindow) private var openWindow
 
     init() {
         // Menu-bar only: no Dock icon when run via `swift run` (the .app bundle also sets LSUIElement).
         NSApplication.shared.setActivationPolicy(.accessory)
+        let timer = PomodoroTimer(onPhaseEnd: Notifier.shared.phaseEnded, idleSeconds: systemIdleSeconds)
+        timer.onIdleReturn = { [unowned timer] since in DispatchQueue.main.async { askAboutIdle(since: since, timer: timer) } }
+        _timer = StateObject(wrappedValue: timer)
+        Notifier.shared.setup(timer: timer)
+        registerHotKeys([(kVK_ANSI_P, { timer.toggle() }), (kVK_ANSI_K, { timer.skip() })])
     }
 
     var body: some Scene {
         MenuBarExtra(timer.label) {
-            Button(timer.running ? "Pause" : "Start") { timer.toggle() }.keyboardShortcut("s")
+            Button(timer.running ? "Pause" : "Start  (⌃⌥P anywhere)") { timer.toggle() }.keyboardShortcut("s")
             Button("Reset") { timer.reset() }.keyboardShortcut("r")
-            Button("Skip") { timer.skip() }.keyboardShortcut("k")
+            Button("Skip  (⌃⌥K anywhere)") { timer.skip() }.keyboardShortcut("k")
             Divider()
             Menu("Preset: \(timer.settings.preset.name)") {
                 ForEach(timer.allPresets, id: \.self) { preset in
@@ -87,12 +94,104 @@ struct CustomTimerView: View {
     }
 }
 
-func notify(_ ended: Phase) {
-    NSSound(named: "Glass")?.play()
-    let message = ended == .work ? "Work session done. Take a break." : "Break over. Back to work."
-    // shortcut: osascript notification works unbundled and unsigned; use UNUserNotificationCenter once you ship a signed .app
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-    process.arguments = ["-e", "display notification \"\(message)\" with title \"Pomodoro\""]
-    try? process.run()
+// MARK: - Idle detection
+
+/// Seconds since the last keyboard, mouse or trackpad event anywhere on the system.
+func systemIdleSeconds() -> TimeInterval {
+    CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
+}
+
+func askAboutIdle(since: Date, timer: PomodoroTimer) {
+    let alert = NSAlert()
+    alert.messageText = "You were away for \(Int(Date().timeIntervalSince(since) / 60)) min"
+    alert.informativeText = "The timer paused when input stopped. Resume from where you left off, count the away time as work, or stay paused."
+    alert.addButton(withTitle: "Resume")
+    alert.addButton(withTitle: "Count it as work")
+    alert.addButton(withTitle: "Stay paused")
+    NSApplication.shared.activate(ignoringOtherApps: true)
+    switch alert.runModal() {
+    case .alertFirstButtonReturn: timer.resume(afterIdleSince: since, countIt: false)
+    case .alertSecondButtonReturn: timer.resume(afterIdleSince: since, countIt: true)
+    default: break
+    }
+}
+
+// MARK: - Global hotkeys (⌃⌥ + key)
+
+private var hotKeyActions: [UInt32: () -> Void] = [:]
+
+func registerHotKeys(_ keys: [(keyCode: Int, action: () -> Void)]) {
+    var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+    InstallEventHandler(GetApplicationEventTarget(), { _, event, _ in
+        var id = EventHotKeyID()
+        GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size, nil, &id)
+        hotKeyActions[id.id]?()
+        return noErr
+    }, 1, &spec, nil, nil)
+    for (index, key) in keys.enumerated() {
+        let id = UInt32(index + 1)
+        hotKeyActions[id] = key.action
+        var ref: EventHotKeyRef?
+        RegisterEventHotKey(UInt32(key.keyCode), UInt32(controlKey | optionKey), EventHotKeyID(signature: 0x504F_4D4F, id: id), GetApplicationEventTarget(), 0, &ref)
+    }
+}
+
+// MARK: - Notifications
+
+final class Notifier: NSObject, UNUserNotificationCenterDelegate {
+    static let shared = Notifier()
+    private weak var timer: PomodoroTimer?
+    // Notifications with buttons need an app bundle signed with a real certificate: `swift run` has no
+    // bundle, and macOS denies ad-hoc signed apps outright. Fall back to osascript (no buttons) otherwise.
+    private let bundled = Bundle.main.bundleIdentifier != nil
+    private var authorized = false
+
+    func setup(timer: PomodoroTimer) {
+        self.timer = timer
+        guard bundled else { return }
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        center.requestAuthorization(options: [.alert, .sound]) { granted, error in
+            self.authorized = granted
+            if let error { NSLog("notifications unavailable, using fallback: \(error.localizedDescription)") }
+        }
+        center.setNotificationCategories([UNNotificationCategory(
+            identifier: "phase",
+            actions: [UNNotificationAction(identifier: "start", title: "Start"), UNNotificationAction(identifier: "skip", title: "Skip")],
+            intentIdentifiers: [])])
+    }
+
+    func phaseEnded(_ ended: Phase) {
+        NSSound(named: "Glass")?.play()
+        let message = ended == .work ? "Work session done. Take a break." : "Break over. Back to work."
+        guard bundled, authorized else {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            process.arguments = ["-e", "display notification \"\(message)\" with title \"Pomodoro\""]
+            try? process.run()
+            return
+        }
+        let content = UNMutableNotificationContent()
+        content.title = "Pomodoro"
+        content.body = message
+        content.categoryIdentifier = "phase"
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)) { error in
+            if let error { NSLog("notification failed: \(error)") }
+        }
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler done: @escaping () -> Void) {
+        DispatchQueue.main.async {
+            switch response.actionIdentifier {
+            case "start": if self.timer?.running == false { self.timer?.start() }
+            case "skip": self.timer?.skip()
+            default: break
+            }
+            done()
+        }
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler done: @escaping (UNNotificationPresentationOptions) -> Void) {
+        done([.banner])  // still show it when the app happens to be frontmost
+    }
 }

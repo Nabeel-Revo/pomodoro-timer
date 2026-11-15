@@ -104,3 +104,57 @@ private func day(_ offset: Int, from base: Date = t0) -> Date {
     #expect(reloaded.settings.dailyGoal == 1)
     #expect(reloaded.sessions(today: t0) == 2, "history survives the upgrade")
 }
+
+@Test func labelWarnsAfterLongPause() {
+    let (timer, _) = makeTimer()
+    timer.start(now: t0)
+    timer.pause(now: t0.addingTimeInterval(10))
+    #expect(timer.label(now: t0.addingTimeInterval(60)) == "🍅 24:50")
+    #expect(timer.label(now: t0.addingTimeInterval(10 + 7 * 60)) == "🍅 24:50 ⏸7m")
+    timer.start(now: t0.addingTimeInterval(500))
+    #expect(timer.label(now: t0.addingTimeInterval(500)) == "🍅 24:50")
+}
+
+@Test func idlePausesRewindsAndAsksOnReturn() {
+    var idle: TimeInterval = 0
+    var returned: [Date] = []
+    let defaults = UserDefaults(suiteName: "PomodoroTests-\(UUID())")!
+    let timer = PomodoroTimer(onPhaseEnd: { _ in }, idleSeconds: { idle }, defaults: defaults)
+    timer.onIdleReturn = { returned.append($0) }
+    let min = 60.0
+
+    timer.start(now: t0)
+    idle = 4 * min
+    timer.tick(now: t0 + 8 * min)
+    #expect(timer.running, "under the threshold")
+    idle = 6 * min
+    timer.tick(now: t0 + 10 * min)
+    #expect(!timer.running)
+    #expect(timer.idleSince == t0 + 4 * min)
+    #expect(timer.remaining == 21 * 60, "rewound to when idleness began")
+    #expect(timer.label(now: t0 + 10 * min) == "🍅 21:00 ⏸6m")
+
+    idle = 0
+    timer.tick(now: t0 + 12 * min)
+    #expect(returned == [t0 + 4 * min])
+    #expect(timer.idleSince == nil)
+    timer.tick(now: t0 + 12 * min)
+    #expect(returned.count == 1, "asks once")
+
+    timer.resume(afterIdleSince: t0 + 4 * min, countIt: true, now: t0 + 12 * min)
+    #expect(timer.running)
+    #expect(timer.remaining == 13 * 60, "8 idle minutes counted as work")
+}
+
+@Test func idleDuringBreakIsIgnored() {
+    var idle: TimeInterval = 10 * 60
+    let defaults = UserDefaults(suiteName: "PomodoroTests-\(UUID())")!
+    let timer = PomodoroTimer(onPhaseEnd: { _ in }, idleSeconds: { idle }, defaults: defaults)
+    timer.skip(now: t0)
+    #expect(timer.phase == .shortBreak)
+    timer.start(now: t0)
+    timer.tick(now: t0 + 60)
+    #expect(timer.running)
+    #expect(timer.remaining == 4 * 60)
+    _ = idle
+}

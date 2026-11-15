@@ -8,6 +8,10 @@ The menu bar shows the phase and time left. The menu has Start/Pause, Reset, Ski
 - **Auto-start breaks / work**: off by default, so the next phase waits for Start.
 - **Persistence**: preset, custom timers, toggles and session history are saved in UserDefaults.
 - **Streaks**: consecutive days where you hit your daily goal (1 to 4 sessions, set in the menu). Today doesn't break the streak until midnight; the menu also shows your best streak.
+- **Global hotkeys**: ⌃⌥P starts or pauses, ⌃⌥K skips, from any app.
+- **Pause awareness**: after 2 minutes paused, the menu bar shows how long, e.g. `🍅 24:50 ⏸7m`.
+- **Idle detection**: 5 minutes without keyboard or mouse input during a work session pauses the timer and rewinds it to when you went idle. When you return, it asks whether to resume, count the away time as work, or stay paused.
+- **Notifications with buttons**: Start and Skip right from the banner. Needs a signed build (see below); otherwise you get a plain notification.
 - **Wall-clock timing**: the countdown is computed from an end time, so it stays correct after sleep or under load.
 
 ## Requirements
@@ -29,6 +33,10 @@ swift run
 make app       # produces Pomodoro.app in this folder
 make install   # copies it to /Applications
 ```
+
+### Notification buttons
+
+macOS only allows real notifications from apps signed with a certificate, not ad-hoc builds. A free one takes a minute: open Xcode → Settings → Accounts → add your Apple ID → Manage Certificates → + → Apple Development. Then `make install` picks it up automatically. First launch asks for notification permission.
 
 To launch at login: System Settings → General → Login Items → add Pomodoro.
 
